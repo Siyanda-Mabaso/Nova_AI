@@ -107,9 +107,9 @@ useEffect(() => {
     <div className="app-container">
       <aside className="sidebar">
         <div className="logo">
-          <span>✦</span>
-          <h2>Nova AI</h2>
-        </div>
+  <img src="/nova-icon.svg" alt="Nova AI Logo" />
+  <h2>Nova AI</h2>
+</div>
 
         <button
           className="new-chat-button"
