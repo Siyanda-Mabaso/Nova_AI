@@ -8,25 +8,75 @@ interface Message {
   sender: "user" | "ai";
 }
 
+interface OllamaResponse {
+  response: string;
+  total_duration: number;
+  eval_count: number;
+  eval_duration: number;
+}
+
 function App() {
   const [prompt, setPrompt] = useState<string>("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
-  const handleSend = (): void => {
-    if (!prompt.trim()) return;
+  const handleSend = async (): Promise<void> => {
+    const userPrompt = prompt.trim();
 
-    const newMessage: Message = {
+    if (!userPrompt || isLoading) return;
+
+    const userMessage: Message = {
       id: Date.now(),
-      text: prompt.trim(),
+      text: userPrompt,
       sender: "user",
     };
 
-    setMessages((previousMessages) => [
-      ...previousMessages,
-      newMessage,
-    ]);
-
+    setMessages((previous) => [...previous, userMessage]);
     setPrompt("");
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const response = await fetch("/ollama/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gemma3:1b",
+          system:
+            "You are Nova, a helpful personal AI assistant. The user's name is Siyanda. Be friendly, clear, and helpful.",
+          prompt: userPrompt,
+          stream: false,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Could not get a response from Ollama.");
+      }
+
+      const data: OllamaResponse = await response.json();
+
+      const aiMessage: Message = {
+        id: Date.now() + 1,
+        text: data.response,
+        sender: "ai",
+      };
+
+      setMessages((previous) => [...previous, aiMessage]);
+
+      console.log("Total duration:", data.total_duration);
+      console.log("Tokens generated:", data.eval_count);
+      console.log("Evaluation duration:", data.eval_duration);
+    } catch (err) {
+      console.error("Ollama error:", err);
+      setError(
+        "Unable to connect to Nova. Please make sure Ollama is running."
+      );
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -37,7 +87,13 @@ function App() {
           <h2>Nova AI</h2>
         </div>
 
-        <button className="new-chat-button">
+        <button
+          className="new-chat-button"
+          onClick={() => {
+            setMessages([]);
+            setError("");
+          }}
+        >
           + New Chat
         </button>
 
@@ -57,12 +113,10 @@ function App() {
         </header>
 
         <section className="chat-messages">
-          {messages.length === 0 ? (
+          {messages.length === 0 && !isLoading ? (
             <div className="welcome-message">
               <div className="welcome-icon">✦</div>
-
               <h1>How can I help you today?</h1>
-
               <p>
                 I'm Nova, your personal AI assistant.
                 Ask me anything and let's explore ideas together.
@@ -77,11 +131,19 @@ function App() {
                 <strong>
                   {message.sender === "user" ? "You" : "Nova"}
                 </strong>
-
                 <p>{message.text}</p>
               </div>
             ))
           )}
+
+          {isLoading && (
+            <div className="message ai">
+              <strong>Nova</strong>
+              <p>Thinking...</p>
+            </div>
+          )}
+
+          {error && <p className="error-message">{error}</p>}
         </section>
 
         <div className="prompt-area">
@@ -93,14 +155,14 @@ function App() {
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
-                  handleSend();
+                  void handleSend();
                 }
               }}
             />
 
             <button
-              onClick={handleSend}
-              disabled={!prompt.trim()}
+              onClick={() => void handleSend()}
+              disabled={!prompt.trim() || isLoading}
               aria-label="Send message"
             >
               ↑
