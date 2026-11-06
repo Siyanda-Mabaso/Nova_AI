@@ -1,11 +1,14 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 interface Message {
   id: number;
   text: string;
   sender: "user" | "ai";
+  duration?: number;
+  tokensGenerated?: number;
+  tokensPerSecond?: number;
 }
 
 interface OllamaResponse {
@@ -17,10 +20,25 @@ interface OllamaResponse {
 
 function App() {
   const [prompt, setPrompt] = useState<string>("");
-  const [messages, setMessages] = useState<Message[]>([]);
+const [messages, setMessages] = useState<Message[]>(() => {
+  try {
+    const savedMessages = localStorage.getItem("nova-chat-history");
+
+    return savedMessages
+      ? (JSON.parse(savedMessages) as Message[])
+      : [];
+  } catch {
+    return [];
+  }
+});
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
-
+useEffect(() => {
+  localStorage.setItem(
+    "nova-chat-history",
+    JSON.stringify(messages)
+  );
+}, [messages]);
   const handleSend = async (): Promise<void> => {
     const userPrompt = prompt.trim();
 
@@ -58,11 +76,17 @@ function App() {
 
       const data: OllamaResponse = await response.json();
 
-      const aiMessage: Message = {
-        id: Date.now() + 1,
-        text: data.response,
-        sender: "ai",
-      };
+     const aiMessage: Message = {
+  id: Date.now() + 1,
+  text: data.response,
+  sender: "ai",
+  duration: data.total_duration / 1_000_000_000,
+  tokensGenerated: data.eval_count,
+  tokensPerSecond:
+    data.eval_duration > 0
+      ? data.eval_count / (data.eval_duration / 1_000_000_000)
+      : 0,
+};
 
       setMessages((previous) => [...previous, aiMessage]);
 
@@ -131,7 +155,17 @@ function App() {
                 <strong>
                   {message.sender === "user" ? "You" : "Nova"}
                 </strong>
-                <p>{message.text}</p>
+           <p>{message.text}</p>
+
+{message.sender === "ai" && (
+  <div className="message-metrics">
+    <span>Time: {message.duration?.toFixed(2)}s</span>
+    <span>Tokens: {message.tokensGenerated}</span>
+    <span>
+      Speed: {message.tokensPerSecond?.toFixed(2)} tokens/s
+    </span>
+  </div>
+)}
               </div>
             ))
           )}
